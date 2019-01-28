@@ -114,7 +114,7 @@ def get_token():
     id_token = jwt.encode(jwt_payload, private_key_pem, algorithm='RS256')
 
     token_exchange_payload = {
-        "id_token": id_token,
+        "id_token": id_token.decode('utf-8'),
         "access_token": str(uuid.uuid4()),
         "expires_in": 3600,
         "token_type": "Bearer",
