@@ -13,7 +13,7 @@ jobs:
       - run:
           name: run tests
           command: |
-            . venv/bin/activate
+            pipenv shell
             mkdir test-reports
             pytest --junitxml=test-reports/junit.xml
 
