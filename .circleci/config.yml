@@ -1,0 +1,21 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: python:3
+    steps:
+      - checkout
+      - run:
+          name: install dependencies
+          command: |  # use pipenv to install dependencies
+            pip install pipenv
+            pipenv install --dev
+      - run:
+          name: run tests
+          command: |
+            mkdir test-reports
+            pipenv run python -m pytest tests/ --junitxml=test-reports/junit.xml
+      - store_test_results:
+          path: test-reports
+      - store_artifacts:
+          path: test-reports
