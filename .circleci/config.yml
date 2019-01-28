@@ -9,3 +9,5 @@ jobs:
           command: |  # use pipenv to install dependencies
             pip install pipenv
             pipenv install
+      - run:
+          pytest tests
