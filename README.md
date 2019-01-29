@@ -39,7 +39,7 @@ Test output will be on the command line.
   "endpoint": "/cheese",
   "methods": ["GET"],
   "status_code": 200,
-  "json_response": "{"type": "cheese"}"
+  "json_response": {"type": "cheese"}
 }
 ``` 
 
