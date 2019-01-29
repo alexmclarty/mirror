@@ -35,6 +35,11 @@ def register():
     # TODO headers = parsed_json['headers']
     json_response = parsed_json['json_response']
 
+    for rule in app.url_map.iter_rules():
+        if rule.rule == endpoint:
+            # Accessing private isn't nice. Raise PR with Werkzeug to support deleting endpoints?
+            app.url_map._rules.remove(rule)
+
     def func():
         response = jsonify(json_response)
         response.status_code = status_code
