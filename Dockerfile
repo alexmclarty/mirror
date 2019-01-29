@@ -2,10 +2,12 @@ FROM python:3
 
 WORKDIR /usr/src/app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY Pipfile Pipfile
+COPY Pipfile.lock Pipfile.lock
+
+RUN pip install pipenv && pipenv install
 
 COPY . .
 EXPOSE 6001
 
-CMD [ "python", "app.py" ]
+CMD [ "pipenv", "run", "python", "app.py" ]
