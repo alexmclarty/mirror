@@ -142,6 +142,9 @@ def get_key():
         ]
     })
 
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6001, debug=os.getenv('DEBUG', False))
+    ssl_context = None
+    if os.getenv('USE_SSL', False):
+        ssl_context = "adhoc"
+
+    app.run(host='0.0.0.0', port=6001, debug=os.getenv('DEBUG', False), ssl_context=ssl_context)
