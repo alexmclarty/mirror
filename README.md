@@ -22,7 +22,7 @@ To run locally setup a virtual environment, activate and install dependencies wi
 ## Environment variables
 
 - Setting the environment variable `DEBUG` to run the app in debug mode and see a stacktrace.
-- Setting `USE_SSL` to true allows the application to run with a self signed SSL certificate
+- Setting `USE_SSL` to `True` allows the application to run with a self signed SSL certificate
 
 ## Running tests
 
