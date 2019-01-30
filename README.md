@@ -19,8 +19,10 @@ The app will be available at `localhost:6001`.
 To run locally setup a virtual environment, activate and install dependencies with `pip install -r requirements.txt`. 
 `app.py` is the entrypoint.
 
-Setting the environment variable `DEBUG` to run the app in debug mode and see a stacktrace.
+## Environment variables
 
+- Setting the environment variable `DEBUG` to run the app in debug mode and see a stacktrace.
+- Setting `USE_SSL` to `True` allows the application to run with a self signed SSL certificate
 
 ## Running tests
 
