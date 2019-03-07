@@ -41,9 +41,19 @@ Test output will be on the command line.
   "endpoint": "/cheese",
   "methods": ["GET"],
   "status_code": 200,
-  "json_response": {"type": "cheese"}
+  "json_response": [{"type": "cheese"}]
 }
 ``` 
+
+* Iterable responses are supported, so you can have an endpoint return something different each time it has been called up to the last json response you specify
+```json
+{
+  "endpoint": "/cheese",
+  "methods": ["GET"],
+  "status_code": 200,
+  "json_response": [{"type": "cheese"}, {"type": "gouda"}]
+}
+```
 
 * List all endpoints by sending a request to `/list`
 * Shutdown the app by sending a request to `/shutdown` 
