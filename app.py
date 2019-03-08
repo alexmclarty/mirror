@@ -20,6 +20,9 @@ private_key_pem = open('{}/keys/jwk/private_key_pem'.format(dir_path), 'r').read
 # Generate a fake token.
 fake_sso_token = str(uuid.uuid4())
 
+# Dictionary of endpoint responses with last position cached
+endpoint_responses = {}
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -33,19 +36,37 @@ def register():
     methods = parsed_json['methods']
     status_code = parsed_json['status_code']
     # TODO headers = parsed_json['headers']
-    json_response = parsed_json['json_response']
+
+    # We will default to a list with an empty response object if no object has been set in list
+    json_responses = [{}] if not parsed_json['json_responses'] else parsed_json['json_responses']
 
     for rule in app.url_map.iter_rules():
         if rule.rule == endpoint:
             # Accessing private isn't nice. Raise PR with Werkzeug to support deleting endpoints?
+            endpoint_responses.pop(endpoint, None)
             app.url_map._rules.remove(rule)
 
     def func():
-        response = jsonify(json_response)
+        # Support for pagination
+        if endpoint_responses[endpoint].get('position') > len(endpoint_responses[endpoint].get('responses')) - 1:
+            # If functions calls are over the length of the json responses, return the last response we can
+            positioned_response = endpoint_responses[endpoint].get(
+                'responses')[len(endpoint_responses[endpoint].get('responses')) - 1]
+        else:
+            # Get the json response we want to return on this round
+            positioned_response = endpoint_responses[endpoint].get(
+                'responses')[endpoint_responses[endpoint].get('position')]
+
+        response = jsonify(positioned_response)
+
+        # Iterate our position since this endpoint has been called
+        endpoint_responses[endpoint]['position'] = endpoint_responses[endpoint].get('position') + 1
+
         response.status_code = status_code
         response.headers = {'content-type': 'application/json'}
         return response
 
+    endpoint_responses[endpoint] = {"responses": json_responses, "position": 0}
     app.add_url_rule(endpoint, str(uuid.uuid4()), view_func=func, methods=methods)
     app.logger.info("Added endpoint.")
 
