@@ -8,7 +8,8 @@ import jwt
 from flask import Flask, request, Response, jsonify, json
 from werkzeug.serving import run_simple
 
-
+# Global to allow for reloads
+to_reload = False
 
 def get_app():
     # Read JWKs.
@@ -95,6 +96,12 @@ def get_app():
         """
         app.logger.info("Shutting down.")
         sys.exit()
+    
+    @app.route('/reload')
+    def reload():
+        global to_reload
+        to_reload = True
+        return "reloaded"
 
     # Open ID Connect
 
