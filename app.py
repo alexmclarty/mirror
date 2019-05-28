@@ -6,162 +6,192 @@ import os
 
 import jwt
 from flask import Flask, request, Response, jsonify, json
-
-app = Flask(__name__)
-app.logger.info("Starting app...")
-
-# Read JWKs.
-dir_path = os.path.dirname(os.path.realpath(__file__))
-keypair = open('{}/keys/jwk/keypair'.format(dir_path), 'r').read()
-keypair_set = open('{}/keys/jwk/keypair_set'.format(dir_path), 'r').read()
-public_key = open('{}/keys/jwk/public_key'.format(dir_path), 'r').read()
-private_key_pem = open('{}/keys/jwk/private_key_pem'.format(dir_path), 'r').read()
-
-# Generate a fake token.
-fake_sso_token = str(uuid.uuid4())
-
-# Dictionary of endpoint responses with last position cached
-endpoint_responses = {}
+from werkzeug.serving import run_simple
 
 
-@app.route('/register', methods=['POST'])
-def register():
+
+def get_app():
+    # Read JWKs.
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    keypair = open('{}/keys/jwk/keypair'.format(dir_path), 'r').read()
+    keypair_set = open('{}/keys/jwk/keypair_set'.format(dir_path), 'r').read()
+    public_key = open('{}/keys/jwk/public_key'.format(dir_path), 'r').read()
+    private_key_pem = open('{}/keys/jwk/private_key_pem'.format(dir_path), 'r').read()
+
+    # Generate a fake token.
+    fake_sso_token = str(uuid.uuid4())
+
+    # Dictionary of endpoint responses with last position cached
+    endpoint_responses = {}
+
+    app = Flask(__name__)
+    app.logger.info("Starting app...")
+
+    @app.route('/register', methods=['POST'])
+    def register():
+        """
+        Register an endpoint.
+        """
+        app.logger.info(request)
+        parsed_json = request.get_json()
+
+        endpoint = parsed_json['endpoint']
+        methods = parsed_json['methods']
+        status_code = parsed_json['status_code']
+        # TODO headers = parsed_json['headers']
+
+        # We will default to a list with an empty response object if no object has been set in list
+        json_responses = [{}] if not parsed_json['json_responses'] else parsed_json['json_responses']
+
+        for rule in app.url_map.iter_rules():
+            if rule.rule == endpoint:
+                # Accessing private isn't nice. Raise PR with Werkzeug to support deleting endpoints?
+                endpoint_responses.pop(endpoint, None)
+                app.url_map._rules.remove(rule)
+
+        def func():
+            # Support for pagination
+            if endpoint_responses[endpoint].get('position') > len(endpoint_responses[endpoint].get('responses')) - 1:
+                # If functions calls are over the length of the json responses, return the last response we can
+                positioned_response = endpoint_responses[endpoint].get(
+                    'responses')[len(endpoint_responses[endpoint].get('responses')) - 1]
+            else:
+                # Get the json response we want to return on this round
+                positioned_response = endpoint_responses[endpoint].get(
+                    'responses')[endpoint_responses[endpoint].get('position')]
+
+            response = jsonify(positioned_response)
+
+            # Iterate our position since this endpoint has been called
+            endpoint_responses[endpoint]['position'] = endpoint_responses[endpoint].get('position') + 1
+
+            response.status_code = status_code
+            response.headers = {'content-type': 'application/json'}
+            return response
+
+        endpoint_responses[endpoint] = {"responses": json_responses, "position": 0}
+        app.add_url_rule(endpoint, str(uuid.uuid4()), view_func=func, methods=methods)
+        app.logger.info("Added endpoint.")
+
+        return Response()
+
+
+    @app.route('/list', methods=['GET'])
+    def list_routes():
+        """
+        List all endpoints.
+        """
+        func_list = {}
+        for rule in app.url_map.iter_rules():
+            if rule.endpoint != 'static':
+                func_list[rule.rule] = app.view_functions[rule.endpoint].__doc__
+        return jsonify(func_list)
+
+
+    @app.route('/shutdown')
+    def shutdown():
+        """
+        Shutdown the app.
+        """
+        app.logger.info("Shutting down.")
+        sys.exit()
+
+    # Open ID Connect
+
+    @app.route('/get_code')
+    def get_code():
+        """
+        Returns a fake code.
+        :return:
+        """
+        return jsonify({'code': fake_sso_token})
+
+
+    @app.route('/connect/token', methods=['POST'])
+    def get_token():
+        """
+        {
+            u'access_token': u'eyJhbGciOiJS...',
+            u'id_token': u'eyJhbGciOiJSUzI1...',
+            u'expires_in': 3600,
+            u'refresh_token': u'1dade9e9416...',
+            u'token_type': u'Bearer'
+        }
+        :return:
+        """
+        now = int(time.time())
+        jwt_payload = {
+            u'family_name': u'Test User',
+            u'aud': u'test',
+            u'iss': u'http://mirror',
+            u'auth_time': now,
+            u'idp': u'local',
+            u'name': u'',
+            u'at_hash': u'DgCSE3R2ZN03RQeXuYZTkw',
+            u'email': u'test@example.com',
+            u'given_name': u'gtv2super',
+            u'exp': now + 600,  # Add 10 minutes onto the current time.
+            u'sid': u'b160650a57dd1db6d5af38f7f90d25e3',
+            u'iat': now,
+            u'amr': [u'pwd'],
+            u'nickname': u'test_user',
+            u'nbf': 1511535122,
+            u'sub': u'e463d3c8-42e8-41f7-835b-87c0f722fe4e'
+        }
+
+        id_token = jwt.encode(jwt_payload, private_key_pem, algorithm='RS256')
+
+        token_exchange_payload = {
+            "id_token": id_token.decode('utf-8'),
+            "access_token": str(uuid.uuid4()),
+            "expires_in": 3600,
+            "token_type": "Bearer",
+            "refresh_token": str(uuid.uuid4())
+        }
+
+        return jsonify(token_exchange_payload)
+
+
+    @app.route('/get_key')
+    def get_key():
+        """
+        Return the public JWK in JWKS format.
+        :return: response
+        """
+        public_key_dict = json.loads(public_key)
+        return jsonify({
+            'keys': [
+                public_key_dict
+            ]
+        })
+    
+    return app
+
+class Mirror:
     """
-    Register an endpoint.
+        Handles encapsulating the default Mirror endpoints
     """
-    app.logger.info(request)
-    parsed_json = request.get_json()
 
-    endpoint = parsed_json['endpoint']
-    methods = parsed_json['methods']
-    status_code = parsed_json['status_code']
-    # TODO headers = parsed_json['headers']
+    def __init__(self, create_app):
+        """
+        Passed a function that returns a Flask app context
+        """
+        self.create_app = create_app
+        self.app = create_app()
 
-    # We will default to a list with an empty response object if no object has been set in list
-    json_responses = [{}] if not parsed_json['json_responses'] else parsed_json['json_responses']
+    def get_application(self):
+        """
+        Handler for every call, checks if a reload is needed
+        """
+        global to_reload
+        if to_reload:
+            self.app = self.create_app()
+            to_reload = False
+        return self.app
 
-    for rule in app.url_map.iter_rules():
-        if rule.rule == endpoint:
-            # Accessing private isn't nice. Raise PR with Werkzeug to support deleting endpoints?
-            endpoint_responses.pop(endpoint, None)
-            app.url_map._rules.remove(rule)
-
-    def func():
-        # Support for pagination
-        if endpoint_responses[endpoint].get('position') > len(endpoint_responses[endpoint].get('responses')) - 1:
-            # If functions calls are over the length of the json responses, return the last response we can
-            positioned_response = endpoint_responses[endpoint].get(
-                'responses')[len(endpoint_responses[endpoint].get('responses')) - 1]
-        else:
-            # Get the json response we want to return on this round
-            positioned_response = endpoint_responses[endpoint].get(
-                'responses')[endpoint_responses[endpoint].get('position')]
-
-        response = jsonify(positioned_response)
-
-        # Iterate our position since this endpoint has been called
-        endpoint_responses[endpoint]['position'] = endpoint_responses[endpoint].get('position') + 1
-
-        response.status_code = status_code
-        response.headers = {'content-type': 'application/json'}
-        return response
-
-    endpoint_responses[endpoint] = {"responses": json_responses, "position": 0}
-    app.add_url_rule(endpoint, str(uuid.uuid4()), view_func=func, methods=methods)
-    app.logger.info("Added endpoint.")
-
-    return Response()
-
-
-@app.route('/list', methods=['GET'])
-def list_routes():
-    """
-    List all endpoints.
-    """
-    func_list = {}
-    for rule in app.url_map.iter_rules():
-        if rule.endpoint != 'static':
-            func_list[rule.rule] = app.view_functions[rule.endpoint].__doc__
-    return jsonify(func_list)
-
-
-@app.route('/shutdown')
-def shutdown():
-    """
-    Shutdown the app.
-    """
-    app.logger.info("Shutting down.")
-    sys.exit()
-
-
-# Open ID Connect
-
-@app.route('/get_code')
-def get_code():
-    """
-    Returns a fake code.
-    :return:
-    """
-    return jsonify({'code': fake_sso_token})
-
-
-@app.route('/connect/token', methods=['POST'])
-def get_token():
-    """
-    {
-        u'access_token': u'eyJhbGciOiJS...',
-        u'id_token': u'eyJhbGciOiJSUzI1...',
-        u'expires_in': 3600,
-        u'refresh_token': u'1dade9e9416...',
-        u'token_type': u'Bearer'
-    }
-    :return:
-    """
-    now = int(time.time())
-    jwt_payload = {
-        u'family_name': u'Test User',
-        u'aud': u'test',
-        u'iss': u'http://mirror',
-        u'auth_time': now,
-        u'idp': u'local',
-        u'name': u'',
-        u'at_hash': u'DgCSE3R2ZN03RQeXuYZTkw',
-        u'email': u'test@example.com',
-        u'given_name': u'gtv2super',
-        u'exp': now + 600,  # Add 10 minutes onto the current time.
-        u'sid': u'b160650a57dd1db6d5af38f7f90d25e3',
-        u'iat': now,
-        u'amr': [u'pwd'],
-        u'nickname': u'test_user',
-        u'nbf': 1511535122,
-        u'sub': u'e463d3c8-42e8-41f7-835b-87c0f722fe4e'
-    }
-
-    id_token = jwt.encode(jwt_payload, private_key_pem, algorithm='RS256')
-
-    token_exchange_payload = {
-        "id_token": id_token.decode('utf-8'),
-        "access_token": str(uuid.uuid4()),
-        "expires_in": 3600,
-        "token_type": "Bearer",
-        "refresh_token": str(uuid.uuid4())
-    }
-
-    return jsonify(token_exchange_payload)
-
-
-@app.route('/get_key')
-def get_key():
-    """
-    Return the public JWK in JWKS format.
-    :return: response
-    """
-    public_key_dict = json.loads(public_key)
-    return jsonify({
-        'keys': [
-            public_key_dict
-        ]
-    })
+    def __call__(self, environ, start_response):
+        app = self.get_application()
+        return app(environ, start_response)
 
 
 if __name__ == '__main__':
@@ -169,4 +199,5 @@ if __name__ == '__main__':
     if os.getenv('USE_SSL', False):
         ssl_context = "adhoc"
 
-    app.run(host='0.0.0.0', port=6001, debug=os.getenv('DEBUG', False), ssl_context=ssl_context)
+    app = Mirror(get_app)
+    run_simple(hostname='0.0.0.0', port=6001, application=app, use_debugger=os.getenv('DEBUG', False), ssl_context=ssl_context)

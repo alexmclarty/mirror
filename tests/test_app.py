@@ -1,14 +1,15 @@
 from flask import json
 
-import app
+from app import get_app
 import unittest
 
 
 class IntegrationTest(unittest.TestCase):
 
     def setUp(self):
-        app.app.testing = True
-        self.app = app.app.test_client()
+        app = get_app()
+        app.testing = True
+        self.app = app.test_client()
 
     def test_post_returns_200(self):
 
